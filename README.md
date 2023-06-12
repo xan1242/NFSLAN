@@ -20,11 +20,23 @@ However, the most important one would be the port, which you can simply define l
 
 There are also `%%dns`, `%%host` (for host names) and a few other keys found within `0x10029AF0` of MW's server.dll (including if statements, includes, variables, etc.)
 
+
+
 `ADDR`  - sets the listen address - this is what is sent to clients as the "slave" address, so disregard what the config comment says - it most certainly communicates with this address
+
+
 `MADDR` & `MPORT` - probably sets master server address & port
+
+
 `RADDR` & `RPORT` - probably sets the redirector address & port
+
+
 `LADDR` & `LPORT` - probably sets the lobby address & port
+
+
 `AADDR` & `APORT` - probably sets the account server address & port
+
+
 
 `LOGCONNECTIONS` - when set to 1, it enables connection logs to the console from the redirector
 
