@@ -20,23 +20,15 @@ However, the most important one would be the port, which you can simply define l
 
 There are also `%%dns`, `%%host` (for host names) and a few other keys found within `0x10029AF0` of MW's server.dll (including if statements, includes, variables, etc.)
 
-
-
 `ADDR`  - sets the listen address - this is what is sent to clients as the "slave" address, so disregard what the config comment says - it most certainly communicates with this address
-
 
 `MADDR` & `MPORT` - probably sets master server address & port
 
-
 `RADDR` & `RPORT` - probably sets the redirector address & port
-
 
 `LADDR` & `LPORT` - probably sets the lobby address & port
 
-
 `AADDR` & `APORT` - probably sets the account server address & port
-
-
 
 `LOGCONNECTIONS` - when set to 1, it enables connection logs to the console from the redirector
 
@@ -58,6 +50,21 @@ There are also `%%dns`, `%%host` (for host names) and a few other keys found wit
 
 There's a lot more that I've missed. This server is pretty large, actually, with enough code to probably run the entire Online mode of the games again.
 
+## Patches
+
+This launcher also automatically patches the server to allow online gameplay.
+
+This also requires some client-side patches.
+
+- SKU - this tag needs to return the external IP of the client in order to determine an online connection
+
+- Client needs to host a UDP server to respond to a local challenge to determine if it's actually local to the server itself on port 9901 - this happens if the address returned via the SKU tag and the connection addresses are different
+
+- UDP bind for the game (not lobby) client needs to be skipped
+
+- Optionally, the returned server IP of the slave server should be ignored client-side as well and just use the same public one that it initiates the connection with
+
 ## TODO
 
 - Document `server.cfg` entirely
+- Figure out LAN redirector completely (in conjunction with client-side patches) - currently players can either play online or local, not mixed. (Only 1 local player is working)
