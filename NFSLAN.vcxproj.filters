@@ -18,5 +18,8 @@
     <ClCompile Include="NFSLAN.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="injector\hooking\Hooking.Patterns.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
