@@ -2,7 +2,7 @@
 // by Xan/Tenjoin
 
 #include <iostream>
-//#include <vector>
+#include <vector>
 #include <map>
 #include <algorithm>
 #include <string>
@@ -11,9 +11,12 @@
 #include <signal.h>
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <iphlpapi.h>
 #include "injector/injector.hpp"
 #include "injector/assembly.hpp"
 #include "injector/hooking/Hooking.Patterns.h"
+#include "Network.h"
+#include <thread>
 
 bool (*StartServer)(char* ServerName, int32_t ForceNameNFSMW, void* Callback, void* CallbackParam);
 bool (*IsServerRunning)();
@@ -23,14 +26,57 @@ uintptr_t who_func = 0x1000AAD0;
 uintptr_t packet_buffer = 0x10058A5C;
 
 std::map<uint32_t, uint32_t> RedirIPs;
+std::vector<uint32_t> LocalUsers;
+
+uint32_t lobbyClientDestAddr = 0;
+
+void LocalChallengeClient(uint32_t addr)
+{
+    constexpr DWORD ChallengeTimeOut = 1000; // 1sec timeout
+    uint32_t query = 0x6A093EC9; // strhash of "LOCAL?" 6A093EC9
+    uint32_t response = 0;
+    char strIP[32];
+    sprintf(strIP, "%u.%u.%u.%u", addr >> 24 & 0xFF, addr >> 16 & 0xFF, addr >> 8 & 0xFF, addr & 0xFF);
+
+    std::cout << "NFSLAN: challenging addr " << strIP << '\n';
+
+    try
+    {
+        UDPSocket Socket;
+        Socket.SetTimeout(ChallengeTimeOut);
+        Socket.SendTo(strIP, 9901, (char*)&query, sizeof(uint32_t));
+        Socket.RecvFrom((char*)&response, sizeof(uint32_t));
+        if (response == 0x8DB682D1) // strhash of "YESIMLOCAL" 8DB682D1
+        {
+            sprintf(strIP, "%u.%u.%u.%u", addr >> 24 & 0xFF, addr >> 16 & 0xFF, addr >> 8 & 0xFF, addr & 0xFF);
+            std::cout << "NFSLAN: addr " << strIP << " is local!\n";
+            LocalUsers.push_back(addr);
+        }
+        Socket.~UDPSocket();
+    }
+    catch (std::exception& ex)
+    {
+        std::cout << "NFSLAN: " << ex.what() << '\n';
+        return;
+    }
+}
 
 uintptr_t lobbyAddrFunc = 0x100025E0;
 void hkLobbyAddr(uintptr_t a0, uintptr_t a1, uintptr_t a2, uint32_t addr)
 {
     uint32_t setaddr = addr;
 
-    if (RedirIPs.find(addr) != RedirIPs.end())
+    if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), lobbyClientDestAddr) != LocalUsers.cend())
+    {
+        if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), addr) != LocalUsers.cend())
+        {
+            setaddr = addr;
+        }
+    }
+    else if (RedirIPs.find(addr) != RedirIPs.end())
         setaddr = RedirIPs.at(addr);
+
+    //printf("Addr: %X Dest: %X\n", setaddr, lobbyClientDestAddr);
 
     return reinterpret_cast<void(*)(uintptr_t, uintptr_t, uintptr_t, uint32_t)>(lobbyAddrFunc)(a0, a1, a2, setaddr);
 }
@@ -65,8 +111,15 @@ void PatchServerMW(uintptr_t base)
     // 100099EF
     uintptr_t loc_100099EF = reinterpret_cast<uintptr_t>(hook::pattern("8B 86 38 0A 00 00 85 C0 BB ? ? ? ? 74 13 50 E8").get_first(0));
 
-    // 0x26514
+    // 10026514
     uintptr_t loc_10026514 = reinterpret_cast<uintptr_t>(hook::pattern("55 8D 4C 24 14 51 57 53 E8 ? ? ? ? 56 8D 54 24 24 68 ? ? ? ? 52 E8 ? ? ? ? 8B 44 24 50").get_first(0)) + 8;
+
+    // 1001363D
+    uintptr_t loc_1001363D = reinterpret_cast<uintptr_t>(hook::pattern("C7 45 5C F4 FF 00 00 89 75 50 89 75 54 89 75 58").get_first(0)) + 7;
+
+    // 10013C95
+    uintptr_t loc_10013C95 = reinterpret_cast<uintptr_t>(hook::pattern("51 89 7D 50 89 7D 54 89 7D 58 8B 4B 10").get_first(0)) + 1;
+
 
     struct PatchAddr1
     {
@@ -118,6 +171,9 @@ void PatchServerMW(uintptr_t base)
                 if (incomingIP != connIP)
                 {
                     RedirIPs.insert(std::pair(connIP, incomingIP));
+
+                    // challenge the connIP to see if it's local to the server, and if it is, add it to its own list
+                    std::thread(LocalChallengeClient, connIP).detach();
                 }
             }
         }
@@ -127,10 +183,20 @@ void PatchServerMW(uintptr_t base)
     {
         void operator()(injector::reg_pack& regs)
         {
-            uint32_t connIP = *(uint32_t*)(regs.edi + 0x14);
-            
-            if (RedirIPs.find(connIP) != RedirIPs.end())
+            uint32_t connIP = *(uint32_t*)(regs.esi + 0x2D0);
+            uint32_t destIP = *(uint32_t*)(regs.edi + 0x14);
+
+            if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
+            {
+                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                {
+                    regs.eax = *(uint32_t*)(regs.esi + 0x2D0);
+                }
+            }
+            else if (RedirIPs.find(connIP) != RedirIPs.end())
+            {
                 regs.eax = RedirIPs.at(connIP);
+            }
             else
                 regs.eax = *(uint32_t*)(regs.esi + 0x2D0);
         }
@@ -140,10 +206,20 @@ void PatchServerMW(uintptr_t base)
     {
         void operator()(injector::reg_pack& regs)
         {
-            uint32_t connIP = *(uint32_t*)(regs.edi + 0x14);
+            uint32_t connIP = *(uint32_t*)(regs.esi + 0x2D4);
+            uint32_t destIP = *(uint32_t*)(regs.edi + 0x14);
 
-            if (RedirIPs.find(connIP) != RedirIPs.end())
+            if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
+            {
+                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                {
+                    regs.ecx = *(uint32_t*)(regs.esi + 0x2D4);
+                }
+            }
+            else if (RedirIPs.find(connIP) != RedirIPs.end())
+            {
                 regs.ecx = RedirIPs.at(connIP);
+            }
             else
                 regs.ecx = *(uint32_t*)(regs.esi + 0x2D4);
         }
@@ -157,11 +233,32 @@ void PatchServerMW(uintptr_t base)
             uint32_t a1 = *(uint32_t*)(regs.esp + 0x410);
             uint32_t connIP = *(uint32_t*)(a1 + 0x14);
 
+            LocalUsers.erase(std::remove(LocalUsers.begin(), LocalUsers.end(), connIP), LocalUsers.end());
             RedirIPs.erase(connIP);
 
             regs.eax = *(uint32_t*)(regs.esi + 0xA38);
         }
     }; injector::MakeInline<CatchLocalSKU_TERM>(loc_100099EF, loc_100099EF + 6);
+
+    struct CatchDestAddr1
+    {
+        void operator()(injector::reg_pack& regs)
+        {
+            lobbyClientDestAddr = *(uint32_t*)(regs.ebp + 0x14);
+            *(uint32_t*)(regs.ebp + 0x50) = 0;
+            *(uint32_t*)(regs.ebp + 0x54) = 0;
+        }
+    }; injector::MakeInline<CatchDestAddr1>(loc_1001363D, loc_1001363D + 6);
+
+    struct CatchDestAddr2
+    {
+        void operator()(injector::reg_pack& regs)
+        {
+            lobbyClientDestAddr = *(uint32_t*)(regs.ebp + 0x14);
+            *(uint32_t*)(regs.ebp + 0x50) = 0;
+            *(uint32_t*)(regs.ebp + 0x54) = 0;
+        }
+    }; injector::MakeInline<CatchDestAddr2>(loc_10013C95, loc_10013C95 + 6);
 
     lobbyAddrFunc = reinterpret_cast<uintptr_t>(injector::MakeCALL(loc_10026514, hkLobbyAddr).get_raw<void>());
     injector::MakeCALL(loc_10026514 + 0x21, hkLobbyAddr);
