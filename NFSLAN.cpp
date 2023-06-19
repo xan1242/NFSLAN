@@ -22,6 +22,8 @@ bool (*StartServer)(char* ServerName, int32_t ForceNameNFSMW, void* Callback, vo
 bool (*IsServerRunning)();
 void (*StopServer)();
 
+bool bDisablePatching = false;
+
 uintptr_t who_func = 0x1000AAD0;
 uintptr_t packet_buffer = 0x10058A5C;
 
@@ -30,6 +32,7 @@ std::vector<uint32_t> LocalUsers;
 
 uint32_t lobbyClientDestAddr = 0;
 
+// requires that the client is using the LanIP plugin!
 void LocalChallengeClient(uint32_t addr)
 {
     constexpr DWORD ChallengeTimeOut = 1000; // 1sec timeout
@@ -302,8 +305,16 @@ int main(int argc, char* argv[])
 
     if (argc < 2)
     {
-        std::cout << "USAGE: NFSLAN servername\n";
+        std::cout << "USAGE: NFSLAN servername [-n]\n" << "-n = no server patching\n";
         return -1;
+    }
+
+    if (argc >= 3)
+    {
+        if (argv[2][0] == '-' && argv[2][1] == 'n')
+        {
+            bDisablePatching = true;
+        }
     }
 
     if (!std::filesystem::exists("server.dll"))
@@ -338,12 +349,15 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    std::cout << "NFSLAN: Patching the server to work on any network...\n";
+    if (!bDisablePatching)
+    {
+        std::cout << "NFSLAN: Patching the server to work on any network...\n";
 
-    if (bIsUnderground2Server((uintptr_t)serverdll))
-        PatchServerUG2((uintptr_t)serverdll);
-    else
-        PatchServerMW((uintptr_t)serverdll);
+        if (bIsUnderground2Server((uintptr_t)serverdll))
+            PatchServerUG2((uintptr_t)serverdll);
+        else
+            PatchServerMW((uintptr_t)serverdll);
+    }
 
     signal(SIGINT, SigInterruptHandler);
     signal(SIGTERM, SigInterruptHandler);
