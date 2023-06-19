@@ -68,15 +68,25 @@ void hkLobbyAddr(uintptr_t a0, uintptr_t a1, uintptr_t a2, uint32_t addr)
 {
     uint32_t setaddr = addr;
 
-    if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), lobbyClientDestAddr) != LocalUsers.cend())
+    if (addr != lobbyClientDestAddr)
     {
-        if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), addr) != LocalUsers.cend())
+        if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), lobbyClientDestAddr) != LocalUsers.cend())
         {
-            setaddr = addr;
+            if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), addr) != LocalUsers.cend())
+            {
+                setaddr = addr;
+            }
+            else if (RedirIPs.find(addr) != RedirIPs.end())
+                setaddr = RedirIPs.at(addr);
         }
-    }
+        else if (RedirIPs.find(addr) != RedirIPs.end())
+            setaddr = RedirIPs.at(addr);
+   }
     else if (RedirIPs.find(addr) != RedirIPs.end())
         setaddr = RedirIPs.at(addr);
+
+
+    //printf("Setting local: Addr: %X Dest: %X\n", setaddr, lobbyClientDestAddr);
 
     //printf("Addr: %X Dest: %X\n", setaddr, lobbyClientDestAddr);
 
@@ -188,19 +198,24 @@ void PatchServerMW(uintptr_t base)
             uint32_t connIP = *(uint32_t*)(regs.esi + 0x2D0);
             uint32_t destIP = *(uint32_t*)(regs.edi + 0x14);
 
-            if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
+            if (connIP != destIP)
             {
-                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
                 {
-                    regs.eax = *(uint32_t*)(regs.esi + 0x2D0);
+                    if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                    {
+                        regs.eax = connIP;
+                    }
+                    else if (RedirIPs.find(connIP) != RedirIPs.end())
+                        regs.eax = RedirIPs.at(connIP);
                 }
+                else if (RedirIPs.find(connIP) != RedirIPs.end())
+                    regs.eax = RedirIPs.at(connIP);
             }
             else if (RedirIPs.find(connIP) != RedirIPs.end())
-            {
                 regs.eax = RedirIPs.at(connIP);
-            }
-            else
-                regs.eax = *(uint32_t*)(regs.esi + 0x2D0);
+
+            //printf("A: Setting local: Addr: %X Dest: %X\n", regs.eax, destIP);
         }
     }; injector::MakeInline<TestLocalSKU>(loc_1000AB32, loc_1000AB32 + 6);
 
@@ -211,19 +226,23 @@ void PatchServerMW(uintptr_t base)
             uint32_t connIP = *(uint32_t*)(regs.esi + 0x2D4);
             uint32_t destIP = *(uint32_t*)(regs.edi + 0x14);
 
-            if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
+            if (connIP != destIP)
             {
-                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), destIP) != LocalUsers.cend())
                 {
-                    regs.ecx = *(uint32_t*)(regs.esi + 0x2D4);
+                    if (std::find(LocalUsers.cbegin(), LocalUsers.cend(), connIP) != LocalUsers.cend())
+                    {
+                        regs.ecx = connIP;
+                    }
+                    else if (RedirIPs.find(connIP) != RedirIPs.end())
+                        regs.ecx = RedirIPs.at(connIP);
                 }
+                else if (RedirIPs.find(connIP) != RedirIPs.end())
+                    regs.ecx = RedirIPs.at(connIP);
             }
             else if (RedirIPs.find(connIP) != RedirIPs.end())
-            {
                 regs.ecx = RedirIPs.at(connIP);
-            }
-            else
-                regs.ecx = *(uint32_t*)(regs.esi + 0x2D4);
+            //printf("LA: Setting local: Addr: %X Dest: %X\n", regs.ecx, destIP);
         }
     }; injector::MakeInline<TestLocalSKU_LA>(loc_1000AB03, loc_1000AB03 + 6);
 
