@@ -58,7 +58,7 @@ void LocalChallengeClient(uint32_t addr)
     }
     catch (std::exception& ex)
     {
-        std::cout << "NFSLAN: " << ex.what() << '\n';
+        std::cerr << "ERROR: " << ex.what() << '\n';
         return;
     }
 }
