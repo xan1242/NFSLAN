@@ -55,7 +55,6 @@ void LocalChallengeClient(uint32_t addr)
             std::cout << "NFSLAN: addr " << strIP << " is local!\n";
             LocalUsers.push_back(addr);
         }
-        Socket.~UDPSocket();
     }
     catch (std::exception& ex)
     {
